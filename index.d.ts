@@ -178,6 +178,8 @@ declare module 'react-native-pell-rich-editor' {
          * By default the toolbar permits an Action set of type DefaultActions
          */
         actions?: Partial<DefaultActions> | string[];
+
+        hideKeyboard: () => void;
     }
 
     export class RichToolbar extends React.Component<RichToolbarProps> {}
