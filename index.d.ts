@@ -15,6 +15,11 @@ declare module 'react-native-pell-rich-editor' {
          * Default is true
          */
         useContainer?: boolean;
+
+        /**
+         * useContainer is false by inline view of initial height
+         */
+        initialHeight?: number | string;
         /**
          * Wrap the editor content placeholder
          * Default is empty string
@@ -41,6 +46,22 @@ declare module 'react-native-pell-rich-editor' {
         disabled?: boolean;
 
         /**
+         * String value to set text auto capitalization.
+         * See: https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/autocapitalize
+         */
+        autoCapitalize?: 'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters';
+
+        /**
+         * Boolean value to enable paste as plain text. The default value is false.
+         */
+        pasteAsPlainText?: boolean;
+
+        /**
+         * HTML element used to insert when the user presses enter. The default value is div.
+         */
+        defaultParagraphSeparator?: string;
+
+        /**
          * Callback called after the editor has been initialized
          */
         editorInitializedCallback?: () => void;
@@ -49,6 +70,32 @@ declare module 'react-native-pell-rich-editor' {
          * Callback after editor data modification
          */
         onChange?: (text: string) => void;
+
+        /**
+         * Callback when the user pastes some content
+         * @param {string} data pastes values
+         */
+        onPaste?: (data: string) => void;
+
+        /**
+         * Callback when the user keyup some content
+         */
+        onKeyUp?: ({keyCode: number, key: string}) => void;
+
+        /**
+         * Callback when the user keydown some content
+         */
+        onKeyDown?: ({keyCode: number, key: string}) => void;
+
+        /**
+         * Callback when the editor focus some content
+         */
+        onFocus?: () => void;
+
+        /**
+         * Callback when the editor blur some content
+         */
+        onBlur?: () => void;
 
         /**
          * Callback after height change
@@ -68,6 +115,8 @@ declare module 'react-native-pell-rich-editor' {
     }
 
     export type SelectionChangeListener = (items: string[]) => void;
+
+    export const actions: {[key: string]: string};
 
     export type DefaultActions = ['image', 'bold', 'italic', 'unorderedList', 'orderedList', 'link'];
 
@@ -93,9 +142,9 @@ declare module 'react-native-pell-rich-editor' {
 
         focusContentEditor: () => void;
 
-        insertImage: (attributes: any) => void;
+        insertImage: (attributes: any, style?: string) => void;
 
-        insertVideo: (attributes: any) => void;
+        insertVideo: (attributes: any, style?: string) => void;
 
         insertLink: (title: string, url: string) => void;
 

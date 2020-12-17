@@ -6,6 +6,11 @@ function createHTML(options = {}) {
         contentCSSText = '',
         cssText = '',
         pasteAsPlainText = false,
+        pasteListener = false,
+        keyDownListener = false,
+        keyUpListener = false,
+        autoCapitalize = 'off',
+        defaultParagraphSeparator = 'div',
     } = options;
     //ERROR: HTML height not 100%;
     return `
@@ -34,9 +39,14 @@ function createHTML(options = {}) {
 <body>
 <div class="content"><div id="editor" class="pell"></div></div>
 <script>
-    var placeholderColor = '${placeholderColor}';
     var __DEV__ = !!${window.__DEV__};
-    (function (exports) {
+    var _ = (function (exports) {
+        var placeholderColor = '${placeholderColor}';
+        var _randomID = 99;
+        var generateId = function (){
+            return "auto_" + (++ _randomID);
+        }
+
         var body = document.body, docEle = document.documentElement;
         var defaultParagraphSeparatorString = 'defaultParagraphSeparator';
         var formatBlock = 'formatBlock';
@@ -62,8 +72,11 @@ function createHTML(options = {}) {
             return document.execCommand(command, false, value);
         };
 
+        var _postMessage = function (data){
+            exports.window.postMessage(JSON.stringify(data));
+        }
         var postAction = function(data){
-            editor.content.contentEditable === 'true' && exports.window.postMessage(JSON.stringify(data));
+            editor.content.contentEditable === 'true' && _postMessage(data);
         };
 
         console.log = function (){
@@ -129,9 +142,9 @@ function createHTML(options = {}) {
                 }
             },
             image: {
-                result: function(url) {
+                result: function(url, style) {
                     if (url){
-                        exec('insertHTML', "<br><div><img src='"+ url +"'/></div><br>");
+                        exec('insertHTML', "<br><div><img style='"+ (style || '')+"' src='"+ url +"'/></div><br>");
                         Actions.UPDATE_HEIGHT();
                     }
                 }
@@ -146,10 +159,10 @@ function createHTML(options = {}) {
             },
             text: { result: function (text){ text && exec('insertText', text); }},
             video: {
-                result: function(url) {
+                result: function(url, style) {
                     if (url) {
                         var thumbnail = url.replace(/.(mp4|m3u8)/g, '') + '-thumbnail';
-                        exec('insertHTML', "<br><div><video src='"+ url +"' poster='"+ thumbnail + "' controls><source src='"+ url +"' type='video/mp4'>No video tag support</video></div><br>");
+                        exec('insertHTML', "<br><div style='"+ (style || '')+"'><video src='"+ url +"' poster='"+ thumbnail + "' controls><source src='"+ url +"' type='video/mp4'>No video tag support</video></div><br>");
                         Actions.UPDATE_HEIGHT();
                     }
                 }
@@ -179,6 +192,10 @@ function createHTML(options = {}) {
                             console.log("set placeholderColor error!")
                         }
                     }
+                },
+
+                commandDOM: function (command){
+                    try {new Function("$", command)(exports.document.querySelector.bind(exports.document))} catch(e){console.error(e)};
                 }
             },
 
@@ -190,7 +207,7 @@ function createHTML(options = {}) {
             UPDATE_HEIGHT: function() {
                 var height = Math.max(docEle.scrollHeight, body.scrollHeight);
                 if (o_height !== height){
-                    postAction({type: 'OFFSET_HEIGHT', data: o_height = height});
+                    _postMessage({type: 'OFFSET_HEIGHT', data: o_height = height});
                 }
             }
         };
@@ -201,7 +218,7 @@ function createHTML(options = {}) {
             content.id = 'content';
             content.contentEditable = true;
             content.spellcheck = false;
-            content.autocapitalize = 'off';
+            content.autocapitalize = '${autoCapitalize}';
             content.autocorrect = 'off';
             content.autocomplete = 'off';
             content.className = "pell-content";
@@ -242,7 +259,7 @@ function createHTML(options = {}) {
             };
 
             var _handleTouchDT = null;
-            var handleTouch = function (event){
+            var handleSelecting = function (event){
                 event.stopPropagation();
                 _handleTouchDT && clearTimeout(_handleTouchDT);
                 _handleTouchDT = setTimeout(function (){
@@ -250,24 +267,41 @@ function createHTML(options = {}) {
                     saveSelection();
                 }, 50);
             }
-            addEventListener(content, 'touchcancel', handleTouch);
-            addEventListener(content, 'mouseup', handleTouch);
-            addEventListener(content, 'touchend', handleTouch);
+
+            var postKeyAction = function (event, type){
+                postAction({type: type, data: {keyCode: event.keyCode, key: event.key}});
+            }
+            var handleKeyup = function (event){
+                if (event.keyCode === 8) handleSelecting (event);
+                ${keyUpListener} && postKeyAction(event, "CONTENT_KEYUP")
+            }
+            var handleKeydown = function (event){
+                ${keyDownListener} && postKeyAction(event, "CONTENT_KEYDOWN");
+            }
+            addEventListener(content, 'touchcancel', handleSelecting);
+            addEventListener(content, 'mouseup', handleSelecting);
+            addEventListener(content, 'touchend', handleSelecting);
+            // Toolbar buttons activate/deactivate erratically after backspacing
+            addEventListener(content, 'keyup', handleKeyup);
+            addEventListener(content, 'keydown', handleKeydown);
             addEventListener(content, 'blur', function () {
                 postAction({type: 'SELECTION_CHANGE', data: []});
+                postAction({type: 'CONTENT_BLUR'});
             });
             addEventListener(content, 'focus', function () {
                 postAction({type: 'CONTENT_FOCUSED'});
             });
-            ${pasteAsPlainText} && addEventListener(content, 'paste', function (e) {
-                // cancel paste
-                e.preventDefault();
-
+            addEventListener(content, 'paste', function (e) {
                 // get text representation of clipboard
                 var text = (e.originalEvent || e).clipboardData.getData('text/plain');
 
-                // insert text manually
-                document.execCommand("insertHTML", false, text);
+                ${pasteListener} && postAction({type: 'CONTENT_PASTED', data: text});
+                if (${pasteAsPlainText}) {
+                    // cancel paste
+                    e.preventDefault();
+                    // insert text manually
+                    document.execCommand("insertHTML", false, text);
+                }
             });
 
             var message = function (event){
@@ -277,10 +311,10 @@ function createHTML(options = {}) {
                         var flag = msgData.name === 'result';
                         // insert image or link need current focus
                         flag && focusCurrent();
-                        action[msgData.name](msgData.data);
+                        action[msgData.name](msgData.data, msgData.options);
                         flag && handler();
                     } else {
-                        action(msgData.data);
+                        action(msgData.data, msgData.options);
                     }
                 }
             };
@@ -295,15 +329,25 @@ function createHTML(options = {}) {
 
         editor = init({
             element: document.getElementById('editor'),
-            defaultParagraphSeparator: 'div',
+            defaultParagraphSeparator: '${defaultParagraphSeparator}',
             onChange: function (){
                 setTimeout(function(){
                     postAction({type: 'CONTENT_CHANGE', data: Actions.content.getHtml()});
                 }, 10);
             }
         })
+        return {
+            sendEvent: function (type, data){
+                event.preventDefault();
+                event.stopPropagation();
+                var id = event.target.id;
+                if ( !id ) event.target.id = id = generateId();
+                _postMessage({type, id, data});
+            }
+        }
     })({
         window: window.ReactNativeWebView || window.parent,
+        document: document
     });
 </script>
 </body>

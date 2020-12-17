@@ -1,8 +1,32 @@
 
-## 1.3.1
+## 1.5.1
+#### Added
+- Add `onFocus` and `onBlur`
+
+#### Changed
+- `insertVideo` and `insertImage` Add style params to dom
+
+
+## 1.5.0
+- Add `onMessage` props on editor Callback outside postMessage internal type processing
+- Add `_.sendEvent(type, data)` event callback to RN, using onMessage to receive callback
+- Add `commandDOM` method can manipulate DOM
+
+## 1.4.0
 #### Added
 - Add `pasteAsPlainText` props on editor
 - Add `removeFormat` props on editor
+- Add `autoCapitalize` props on editor of autocapitalize
+- Add `onPaste` props on editor callback paste value
+- Add `onKeyUp` props on editor callback keyup event
+- Add `onKeyDown` props on editor callback keydown event
+
+#### Changed
+- useContainer is false of used initialHeight
+
+#### Fix
+- Toolbar buttons activate/deactivate erratically after backspacing
+- disabled editor height fix
 
 ## 1.3.0
 #### Added

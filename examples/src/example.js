@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import {
+    Alert,
     Appearance,
     Button,
     Keyboard,
@@ -23,15 +24,17 @@ import {InsertLinkModal} from './insertLink';
 import {EmojiView} from './emoji';
 
 const initHTML = `<br/>
-<center><b>Rich Editor</b></center>
+<center><b onclick="_.sendEvent('TitleClick')" id="title" >Rich Editor</b></center>
 <center>
 <a href="https://github.com/wxik/react-native-rich-editor">React Native</a>
 <span>And</span>
 <a href="https://github.com/wxik/flutter-rich-editor">Flutter</a>
 </center>
 <br/>
-<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/120px-React-icon.svg.png" />
-<br/><br/><br/><br/>
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/120px-React-icon.svg.png"  onclick="_.sendEvent('ImgClick')"/>
+<br/><br/>
+<span ontouchstart="event.preventDefault();" ontouchend="_.sendEvent('SwitchImage')"> Click Switch Image</span>
+<br/><br/>
 `;
 
 const phizIcon = require('./assets/phiz.png');
@@ -133,6 +136,7 @@ class Example extends React.Component {
     insertVideo() {
         this.richText.current?.insertVideo(
             'https://mdn.github.io/learning-area/html/multimedia-and-embedding/video-and-audio-content/rabbit320.mp4',
+            'width: 50%;',
         );
     }
 
@@ -144,6 +148,7 @@ class Example extends React.Component {
         // insert URL
         this.richText.current?.insertImage(
             'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/100px-React-icon.svg.png',
+            'background: gray;',
         );
         // insert base64
         // this.richText.current?.insertImage(`data:${image.mime};base64,${image.data}`);
@@ -190,6 +195,44 @@ class Example extends React.Component {
     onDisabled() {
         this.setState({disabled: !this.state.disabled});
     }
+
+    handlePaste = (data) => {
+        console.log('Paste:', data);
+    };
+
+    handleKeyUp = (data) => {
+        console.log('KeyUp:', data);
+    };
+
+    handleKeyDown = (data) => {
+        console.log('KeyDown:', data);
+    };
+
+    handleMessage = ({type, id, data}) => {
+        switch (type) {
+            case 'ImgClick':
+                break;
+            case 'TitleClick':
+                const index = this._tempIndex || 0;
+                const color = ['red', 'blue', 'gray', 'yellow', 'coral'][index];
+                this._tempIndex = index + 1 >= color.length ? 0 : index + 1;
+
+                // command: $ = document.querySelector
+                this.richText.current?.commandDOM(`$('#${id}').style.color='${color}'`);
+                break;
+            case 'SwitchImage':
+                break;
+        }
+        console.log('onMessage', type, id, data);
+    };
+
+    handleFocus = () => {
+        console.log('Editor Focus');
+    };
+
+    handleBlur = () => {
+        console.log('Editor Blur');
+    };
 
     render() {
         let that = this;
@@ -245,6 +288,13 @@ class Example extends React.Component {
                         editorInitializedCallback={that.editorInitializedCallback}
                         onChange={that.handleChange}
                         onHeightChange={that.handleHeightChange}
+                        onPaste={that.handlePaste}
+                        onKeyUp={that.handleKeyUp}
+                        onKeyDown={that.handleKeyDown}
+                        onMessage={that.handleMessage}
+                        onFocus={that.handleFocus}
+                        onBlur={that.handleBlur}
+                        pasteAsPlainText={true}
                     />
                 </ScrollView>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -307,6 +357,8 @@ const styles = StyleSheet.create({
     rich: {
         minHeight: 300,
         flex: 1,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderColor: '#e8e8e8',
     },
     richBar: {
         height: 50,

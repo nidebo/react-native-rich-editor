@@ -14,6 +14,10 @@ export default class RichTextEditor extends Component {
     //     onHeightChange: PropTypes.func,
     //     initialFocus: PropTypes.bool,
     //     disabled: PropTypes.bool,
+    //     onPaste: PropTypes.func,
+    //     onKeyUp: PropTypes.func,
+    //     onKeyDown: PropTypes.func,
+    //     onFocus: PropTypes.func,
     // };
 
     static defaultProps = {
@@ -25,6 +29,8 @@ export default class RichTextEditor extends Component {
         disabled: false,
         useContainer: true,
         pasteAsPlainText: false,
+        autoCapitalize: 'off',
+        defaultParagraphSeparator: 'div',
         editorInitializedCallback: () => {},
     };
 
@@ -45,6 +51,11 @@ export default class RichTextEditor extends Component {
             editorStyle: {backgroundColor, color, placeholderColor, cssText, contentCSSText} = {},
             html,
             pasteAsPlainText,
+            onPaste,
+            onKeyUp,
+            onKeyDown,
+            autoCapitalize,
+            defaultParagraphSeparator,
         } = props;
         that.state = {
             html: {
@@ -57,6 +68,11 @@ export default class RichTextEditor extends Component {
                         cssText,
                         contentCSSText,
                         pasteAsPlainText,
+                        pasteListener: !!onPaste,
+                        keyUpListener: !!onKeyUp,
+                        keyDownListener: !!onKeyDown,
+                        autoCapitalize,
+                        defaultParagraphSeparator,
                     }),
             },
             keyboardHeight: 0,
@@ -113,7 +129,9 @@ export default class RichTextEditor extends Component {
 
     onMessage(event) {
         try {
+            const props = this.props;
             const message = JSON.parse(event.nativeEvent.data);
+            const data = message.data;
             switch (message.type) {
                 case messages.CONTENT_HTML_RESPONSE:
                     if (this.contentResolve) {
@@ -127,7 +145,7 @@ export default class RichTextEditor extends Component {
                     }
                     break;
                 case messages.LOG:
-                    console.log('FROM EDIT:', ...message.data);
+                    console.log('FROM EDIT:', ...data);
                     break;
                 case messages.SELECTION_CHANGE: {
                     const items = message.data;
@@ -137,15 +155,35 @@ export default class RichTextEditor extends Component {
                     break;
                 }
                 case messages.CONTENT_FOCUSED: {
-                    this.focusListeners.map((da) => da());
+                    this.focusListeners.map((da) => da()); // Subsequent versions will be deleted
+                    props.onFocus && props.onFocus();
+                    break;
+                }
+                case messages.CONTENT_BLUR: {
+                    props.onBlur && props.onBlur();
                     break;
                 }
                 case messages.CONTENT_CHANGE: {
-                    this.props.onChange && this.props.onChange(message.data);
+                    props.onChange && props.onChange(data);
+                    break;
+                }
+                case messages.CONTENT_PASTED: {
+                    props.onPaste && props.onPaste(data);
+                    break;
+                }
+                case messages.CONTENT_KEYUP: {
+                    props.onKeyUp && props.onKeyUp(data);
+                    break;
+                }
+                case messages.CONTENT_KEYDOWN: {
+                    props.onKeyDown && props.onKeyDown(data);
                     break;
                 }
                 case messages.OFFSET_HEIGHT:
-                    this.setWebHeight(message.data);
+                    this.setWebHeight(data);
+                    break;
+                default:
+                    props.onMessage && props.onMessage(message);
                     break;
             }
         } catch (e) {
@@ -162,8 +200,15 @@ export default class RichTextEditor extends Component {
         }
     };
 
-    _sendAction(type, action, data) {
-        let jsonString = JSON.stringify({type, name: action, data});
+    /**
+     * @param {String} type
+     * @param {String} action
+     * @param {any} data
+     * @param [options]
+     * @private
+     */
+    _sendAction(type, action, data, options) {
+        let jsonString = JSON.stringify({type, name: action, data, options});
         if (this.webviewBridge) {
             this.webviewBridge.postMessage(jsonString);
         }
@@ -219,16 +264,12 @@ export default class RichTextEditor extends Component {
         // useContainer is an optional prop with default value of true
         // If set to true, it will use a View wrapper with styles and height.
         // If set to false, it will not use a View wrapper
-        const {useContainer, style} = this.props;
-
-        if (useContainer) {
-            return (
-                <View style={[style, {height: height || Dimensions.get('window').height * 0.7}]}>
-                    {this.renderWebView()}
-                </View>
-            );
-        }
-        return this.renderWebView();
+        const {useContainer, style, initialHeight = 0} = this.props;
+        return useContainer ? (
+            <View style={[style, {height: height || initialHeight}]}>{this.renderWebView()}</View>
+        ) : (
+            this.renderWebView()
+        );
     }
 
     //-------------------------------------------------------------------------------
@@ -238,6 +279,11 @@ export default class RichTextEditor extends Component {
         this.selectionChangeListeners = [...this.selectionChangeListeners, listener];
     }
 
+    /**
+     * Subsequent versions will be deleted, please use onFocus
+     * @deprecated remove
+     * @param listener
+     */
     setContentFocusHandler(listener) {
         this.focusListeners.push(listener);
     }
@@ -279,12 +325,20 @@ export default class RichTextEditor extends Component {
         }
     }
 
-    insertImage(attributes) {
-        this._sendAction(actions.insertImage, 'result', attributes);
+    /**
+     * @param attributes
+     * @param [style]
+     */
+    insertImage(attributes, style) {
+        this._sendAction(actions.insertImage, 'result', attributes, style);
     }
 
-    insertVideo(attributes) {
-        this._sendAction(actions.insertVideo, 'result', attributes);
+    /**
+     * @param attributes
+     * @param [style]
+     */
+    insertVideo(attributes, style) {
+        this._sendAction(actions.insertVideo, 'result', attributes, style);
     }
 
     insertText(text) {
@@ -302,11 +356,17 @@ export default class RichTextEditor extends Component {
         }
     }
 
+    commandDOM(command) {
+        if (command) {
+            this._sendAction(actions.content, 'commandDOM', command);
+        }
+    }
+
     init() {
         let that = this;
         const {initialFocus, initialContentHTML, placeholder, editorInitializedCallback, disabled} = that.props;
-        that.setContentHTML(initialContentHTML);
-        that.setPlaceholder(placeholder);
+        initialContentHTML && that.setContentHTML(initialContentHTML);
+        placeholder && that.setPlaceholder(placeholder);
         that.setDisable(disabled);
         editorInitializedCallback();
 
